@@ -17,13 +17,9 @@ The framework has three core components:
 
 The training objective combines answer generation and retrieval distillation:
 
-$$
-\mathcal{L}
-=
-\mathcal{L}_{\mathrm{gen}}
-+
-\lambda D_{\mathrm{KL}}\!\left(p_{\mathrm{teacher}} \,\|\, p_{\mathrm{GFM}}\right).
-$$
+```math
+\mathcal{L} = \mathcal{L}_{\mathrm{gen}} + \lambda D_{\mathrm{KL}}\left(p_{\mathrm{teacher}} \parallel p_{\mathrm{GFM}}\right).
+```
 
 Training uses question-answer supervision and semantic pseudo-labels without golden annotations for retrieval. The paper evaluates the framework on three multi-hop QA datasets and three out-of-domain GraphRAG benchmarks.
 
