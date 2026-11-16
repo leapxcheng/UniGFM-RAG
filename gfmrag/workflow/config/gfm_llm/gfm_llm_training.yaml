@@ -1,0 +1,159 @@
+hydra:
+  run:
+    dir: /mnt/shared-storage-user/safevl-share/leap/gfmrag/outputs/gfm_llm/${now:%Y-%m-%d}/${now:%H-%M-%S}  # /mnt/shared-storage-user/safevl-share/leap/gfmrag/
+  searchpath:
+    - pkg://gfmrag.workflow.config
+  
+defaults:
+  - _self_
+  - text_emb_model: qwen3
+  - wandb: default
+
+topk: 5
+seed: 1024
+timeout: 180  # timeout minutes for multi-gpu training
+save_pretrained: yes
+load_model_from_pretrained: null # Load model from pre-trained format, which would overwrite the model configuration
+
+# =====================================================
+# GFM-LLM Model Configuration
+# =====================================================
+model:
+  _target_: gfmrag.models.gfm_llm.GFMLLMModel
+
+  # # Option 1: Load GraphReasoner from pretrained checkpoint (推荐)
+  gfm_pretrained_path: outputs/qa_finetune/2025-09-10/10-18-12/pretrained
+
+  # # Option 2: Instantiate GraphReasoner from config (if gfm_pretrained_path is empty)
+  graph_reasoner:
+    _target_: gfmrag.models.gfm_reasoner.GraphReasoner
+    use_ent_emb: early-late-fusion
+    feat_dim: 1024
+    entity_model:
+      _target_: gfmrag.models.ultra.models.QueryNBFNet
+      input_dim: 1024
+      hidden_dims: [1024, 1024, 1024, 1024, 1024, 1024]
+      message_func: distmult
+      aggregate_func: sum
+      short_cut: yes
+      layer_norm: yes
+      return_hidden: True
+
+  # LLM Configuration
+  llm_model_name_or_path: Qwen/Qwen3-4B
+  llm_dtype: bfloat16
+  llm_attn_implementation: flash_attention_2  # Options: flash_attention_2, sdpa
+
+  # Freezing Strategy
+  freeze_gfm: false   # Freeze GraphReasoner weights
+  freeze_llm: false             # Keep LLM trainable (or use LoRA)
+
+  # LoRA Configuration (optional - set enable_lora: true to use)
+  enable_lora: true
+  lora_config:
+    r: 16
+    lora_alpha: 32
+    lora_dropout: 0.1
+    target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+  # Projection Layer
+  projection_hidden_dim: 2048
+  max_graph_tokens: ${topk}
+
+  # loss weights
+  loss_type: kl # mse
+  weight_type: sigmoid
+  loss_if_top_k: false
+  loss_top_k: 32
+  alpha: 1.0
+  distill_temperature: 0.05   # loss for kl divergence
+
+
+# =====================================================
+# Dataset Configuration
+# =====================================================
+datasets:
+  _target_: gfmrag.graph_index_datasets.GraphIndexDataset
+  cfgs:
+    root: ./data
+    force_reload: False   # error
+    text_emb_model_cfgs: ${text_emb_model}
+  train_names:
+    - hotpotqa_train_example
+  valid_names:
+    - hotpotqa_test
+  init_datasets: True
+  feat_dim: 1024
+  max_datasets_in_memory: 10
+  data_loading_workers: 4
+
+# =====================================================
+# Optimizer Configuration
+# =====================================================
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 2.0e-5 # 1.0e-4
+  weight_decay: 0.01
+
+module_lrs:
+  gnn: 1.0e-4
+  proj: 1.0e-4
+
+# Learning Rate Scheduler (optional)
+lr_scheduler:
+  _target_: transformers.get_cosine_schedule_with_warmup
+  num_warmup_steps: 100
+  # num_training_steps will be calculated at runtime
+
+# =====================================================
+# Training Configuration
+# =====================================================
+trainer:
+  _target_: gfmrag.trainers.GFMLLMTrainer
+  args:
+    _target_: gfmrag.trainers.GFMLLMTrainingArguments
+    train_batch_size: 4
+    num_epoch: 3
+    logging_steps: 50
+    max_steps_per_epoch: null
+    max_eval_steps: null
+    resume_from_checkpoint: null
+    do_train: true
+    do_eval: true
+    do_predict: true
+    save_best_only: yes
+    metric_for_best_model:
+      - hotpotqa_test/em
+      - 2wikimultihopqa_test/em
+      - musique_test/em
+    dtype: ${model.llm_dtype}
+    max_new_tokens: 128 # Max new LLM tokens to generate during evaluation
+    threshold: 0.5 # Probability threshold for node selection during generation
+    max_graph_tokens: ${topk} # Max graph tokens to include during generation
+    top_k: ${topk}      # Only Top-K nodes to consider during generation, if set, threshold and max_graph_tokens will be ignored
+    max_grad_norm: 1.0
+  # QA Evaluation Metrics
+  # Available metrics: em (exact match), fm (fuzzy match), f1 (token F1)
+  # Set to null or empty list to disable QA generation during evaluation
+  qa_metrics:
+    - em
+    - fm
+    - f1
+  re_metrics:
+    - recall@2
+    - recall@5
+    - recall@10
+
+  cs_prompt_map:
+    FB: qa_prompt/graphrag_bench_cs/fb
+    MC: qa_prompt/graphrag_bench_cs/mc
+    MS: qa_prompt/graphrag_bench_cs/ms
+    OE: qa_prompt/graphrag_bench_cs/oe
+    TF: qa_prompt/graphrag_bench_cs/tf
+  
+  prompt_root: qa_prompt/graphrag_benchmark/novel
+  prompt_map:
+    Fact Retrieval: ${trainer.prompt_root}/fact_retrieval
+    Complex Reasoning: ${trainer.prompt_root}/complex_reasoning
+    Contextual Summarize: ${trainer.prompt_root}/contextual_summary
+    Creative Generation: ${trainer.prompt_root}/creative_generation

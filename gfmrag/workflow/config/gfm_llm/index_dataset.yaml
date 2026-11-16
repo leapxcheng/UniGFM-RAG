@@ -1,0 +1,24 @@
+hydra:
+  run:
+    dir: /mnt/shared-storage-user/safevl-share/leap/gfmrag/outputs/dataset_index/${now:%Y-%m-%d}/${now:%H-%M-%S}  # /mnt/shared-storage-user/safevl-share/leap/gfmrag/
+  searchpath:
+    - pkg://gfmrag.workflow.config
+  
+defaults:
+  - _self_
+  - text_emb_model: qwen3
+  - wandb: default
+
+datasets:
+  _target_: gfmrag.graph_index_datasets.GraphIndexDataset # The QA dataset class
+
+  root: /mnt/shared-storage-user/safevl-share/leap/gfmrag2 # data root directory
+  force_reload: false # Whether to force rebuild the dataset
+  text_emb_model_cfgs: ${text_emb_model} # The text embedding model configuration
+
+train_names: # List of training dataset names
+  - []
+valid_names: # List of validation dataset names
+  - hotpotqa_test
+  - musique_test
+  - 2wikimultihopqa_test
