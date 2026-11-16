@@ -1,6 +1,4 @@
-# UniGFM-RAG
-
-### Unify Graph Foundation Models and Large Language Models for End-to-End Retrieval and Reasoning, IEEE TKDE 2026
+# UniGFM-RAG: Unify Graph Foundation Models and Large Language Models for End-to-End Retrieval and Reasoning, IEEE TKDE 2026
 
 [![arXiv](https://img.shields.io/badge/arXiv-2610.34866-b31b1b.svg)](https://arxiv.org/abs/2610.34866)
 [![IEEE TKDE](https://img.shields.io/badge/IEEE%20TKDE-Accepted-00629B.svg)](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=11790301)
